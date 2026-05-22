@@ -68,7 +68,7 @@ error(void)
      * error. */
 
     error_count++;
-    if (error_count == 100) {
+    if (error_count == 100 && !in_initex_mode) {
         print_nl_cstr("(That makes 100 errors; please try again.)");
         history = HISTORY_FATAL_ERROR;
         post_error_message(0);

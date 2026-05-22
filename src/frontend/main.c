@@ -1000,7 +1000,7 @@ static void interpret_command(struct persistent_state *ps,
           txp_renderer_get_config(ps->ctx, ui->doc_renderer);
       config->background_color = convert_color(ps->ctx, stack, cmd.theme.bg);
       config->foreground_color = convert_color(ps->ctx, stack, cmd.theme.fg);
-      config->themed_color = 1;
+      // config->themed_color = 1;
       schedule_event(RENDER_EVENT);
       fprintf(stderr, "[command] theme %x %x\n",
               config->background_color, config->foreground_color);

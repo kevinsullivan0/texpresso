@@ -3062,7 +3062,7 @@ initialize_more_variables(void)
     native_text_size = 128;
     native_text = xmalloc(native_text_size * sizeof(UTF16_code));
 
-    interaction = ERROR_STOP_MODE;
+    interaction = in_initex_mode ? NONSTOP_MODE : ERROR_STOP_MODE;
 
     deletions_allowed = true;
     set_box_allowed = true;

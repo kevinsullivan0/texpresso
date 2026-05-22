@@ -101,7 +101,7 @@ txp_renderer *txp_renderer_new(fz_context *ctx, SDL_Renderer *sdl)
     self->config.zoom = 1;
     self->config.background_color = 0xFFFFFF;
     self->config.foreground_color = 0x000000;
-    self->config.themed_color = 1;
+    self->config.themed_color = 0;
     self->config.invert_color = 0;
   }
   fz_catch(ctx)
