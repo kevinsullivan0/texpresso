@@ -150,7 +150,20 @@ engine starts paused, so `(resume)` is required to begin compilation.
 (synctex-forward "path" line)
 ```
 
-Try to scroll the UI to the contents defined in TeX file at "path" and line. The path can be absolute or relative to the root document.
+Try to scroll the UI to the contents defined in TeX file at "path" and line.
+The path can be absolute or relative to the root document. This location also
+becomes the focused preview target: compilation pauses automatically once its
+output page and SyncTeX records are complete. A new request replaces the old
+one; manual `(pause)` remains authoritative.
+
+When the page is ready TeXpresso emits:
+
+```scheme
+(preview-ready "path" line page)
+```
+
+`page` is zero-based. JSON protocol users receive
+`["preview-ready", "path", line, page]`.
 
 ## Messages (texpresso -> editor)
 

@@ -440,6 +440,24 @@ static void output_data_string(FILE *f, const char *ptr, int len)
   }
 }
 
+void editor_preview_ready(const char *path, int line, int page)
+{
+  switch (protocol)
+  {
+    case EDITOR_SEXP:
+      fprintf(stdout, "(preview-ready \"");
+      output_data_string(stdout, path, strlen(path));
+      fprintf(stdout, "\" %d %d)\n", line, page);
+      break;
+    case EDITOR_JSON:
+      fprintf(stdout, "[\"preview-ready\", \"");
+      output_data_string(stdout, path, strlen(path));
+      fprintf(stdout, "\", %d, %d]\n", line, page);
+      break;
+  }
+  fflush(stdout);
+}
+
 static const char *editor_info_buffer(enum EDITOR_INFO_BUFFER name)
 {
   switch (name)

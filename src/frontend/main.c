@@ -114,6 +114,9 @@ typedef struct {
   uint32_t last_click_ticks;
   enum ui_mouse_status mouse_status;
   bool advancing;
+  bool preview_active, preview_satisfied;
+  char preview_path[1024];
+  int preview_line;
 } ui_state;
 
 /* UI rendering */
@@ -167,6 +170,35 @@ static bool need_advance(fz_context *ctx, ui_state *ui)
   return (need && send(get_status, ui->eng) == DOC_RUNNING);
 }
 
+static bool preview_ready(fz_context *ctx, ui_state *ui)
+{
+  if (!ui->preview_active || ui->preview_satisfied)
+    return false;
+
+  fz_buffer *buf;
+  synctex_t *stx = send(synctex, ui->eng, &buf);
+  int page = -1;
+  if (!synctex_find_target(ctx, stx, buf, &page, NULL, NULL) ||
+      synctex_has_target(stx) ||
+      page < 0 || send(page_count, ui->eng) <= page ||
+      synctex_page_count(stx) <= page)
+    return false;
+
+  ui->page = page;
+  ui->preview_satisfied = true;
+  editor_preview_ready(ui->preview_path, ui->preview_line, page);
+  return true;
+}
+
+static void reset_preview(ui_state *ui)
+{
+  if (!ui->preview_active)
+    return;
+  ui->preview_satisfied = false;
+  synctex_set_target(send(synctex, ui->eng, NULL), ui->page,
+                     ui->preview_path, ui->preview_line);
+}
+
 static bool advance_engine(fz_context *ctx, ui_state *ui)
 {
   bool need = need_advance(ctx, ui);
@@ -184,6 +216,9 @@ static bool advance_engine(fz_context *ctx, ui_state *ui)
   {
     if (!send(step, ui->eng, ctx, false))
       break;
+
+    if (preview_ready(ctx, ui))
+      return false;
 
     steps -= 1;
     need = need_advance(ctx, ui);
@@ -438,6 +473,8 @@ static void pan_to(fz_context *ctx, ui_state *ui, enum pan_to to)
 
 static void previous_page(fz_context *ctx, ui_state *ui, bool pan)
 {
+  ui->preview_active = false;
+  ui->preview_satisfied = false;
   synctex_set_target(send(synctex, ui->eng, NULL), 0, NULL, 0);
   if (ui->page > 0)
   {
@@ -461,6 +498,8 @@ static void previous_page(fz_context *ctx, ui_state *ui, bool pan)
 
 static void next_page(fz_context *ctx, ui_state *ui, bool pan)
 {
+  ui->preview_active = false;
+  ui->preview_satisfied = false;
   synctex_set_target(send(synctex, ui->eng, NULL), 0, NULL, 0);
   ui->page += 1;
   // FIXME: Same remark as in previous_page.
@@ -1067,7 +1106,7 @@ static void interpret_command(struct persistent_state *ps,
       synctex_t *stx = send(synctex, ui->eng, &buf);
       int go_up = 0;
       const char *path = relative_path(cmd.synctex_forward.path, ps->doc_path, &go_up);
-      if (go_up > 0)
+      if (go_up > 0 || strlen(path) >= sizeof(ui->preview_path))
       {
         fprintf(stderr,
                 "[command] synctex-forward %s: file has a different root, skipping\n",
@@ -1075,6 +1114,10 @@ static void interpret_command(struct persistent_state *ps,
       }
       else
       {
+        strcpy(ui->preview_path, path);
+        ui->preview_line = cmd.synctex_forward.line;
+        ui->preview_active = true;
+        ui->preview_satisfied = false;
         synctex_set_target(stx, ui->page, path, cmd.synctex_forward.line);
         schedule_event(STDIN_EVENT);
       }
@@ -1316,19 +1359,25 @@ bool texpresso_main(struct persistent_state *ps)
 
     if (send(end_changes, ui->eng, ps->ctx))
     {
-      if (!ps->paused)
+      reset_preview(ui);
+      if (!ps->paused && !ui->preview_satisfied)
         send(step, ui->eng, ps->ctx, true);
       schedule_event(RELOAD_EVENT);
     }
+    if (!ps->paused && preview_ready(ps->ctx, ui))
+      schedule_event(RELOAD_EVENT);
 
     // Process document
     {
       int before_page_count = send(page_count, ui->eng);
-      bool advance = !ps->paused && advance_engine(ps->ctx, ui);
+      bool advance = !ps->paused && !ui->preview_satisfied &&
+                     advance_engine(ps->ctx, ui);
       int after_page_count = send(page_count, ui->eng);
       fflush(stdout);
 
       if (ui->page >= before_page_count && ui->page < after_page_count)
+        schedule_event(RELOAD_EVENT);
+      if (ui->preview_satisfied && ui->page < after_page_count)
         schedule_event(RELOAD_EVENT);
 
       if (!has_event)
@@ -1598,7 +1647,8 @@ bool texpresso_main(struct persistent_state *ps)
           send(detect_changes, ui->eng, ps->ctx);
           if (send(end_changes, ui->eng, ps->ctx))
           {
-            if (!ps->paused)
+            reset_preview(ui);
+            if (!ps->paused && !ui->preview_satisfied)
               send(step, ui->eng, ps->ctx, true);
             schedule_event(RELOAD_EVENT);
           }
@@ -1610,7 +1660,8 @@ bool texpresso_main(struct persistent_state *ps)
           flush_changes(ps, ui);
           if (send(end_changes, ui->eng, ps->ctx))
           {
-            if (!ps->paused)
+            reset_preview(ui);
+            if (!ps->paused && !ui->preview_satisfied)
               send(step, ui->eng, ps->ctx, true);
             schedule_event(RELOAD_EVENT);
           }
